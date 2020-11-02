@@ -1,4 +1,4 @@
-# MSCNaN: Decentralising Media through CIDs
+# MSCNaN: Decentralising media through CIDs
 <sup>Authored by Jan Christian Grünhage and Andrew Morgan</sup>
 
 Currently, the Media API is less decentralised than most other aspects of
@@ -12,7 +12,7 @@ file. This proposal modifies the media ID to be a
 things) includes a hash of the file. This allows us to verify the integrity of
 the file both on the server side and the client side.
 
-## Current Behaviour
+## Current behaviour
 ### Sending
 ```mermaid
 sequenceDiagram
@@ -145,7 +145,7 @@ invalid content for rooms that they participate in.
 	   tried last to make sure servers leaving a room aren't put under any
 	   unnecessary load from that room anymore.
 
-## Potential Issues
+## Potential issues
  - Multihash and CID are not wide spread outside of IPFS and Protocol Labs.
    There's implementations for a few languages, but this might be an at least
    somewhat limiting factor. Less difficult than E2EE, but still not trivial.
@@ -180,7 +180,7 @@ invalid content for rooms that they participate in.
    help with the potential issue of leaking file contents, as discussed in the
    security considerations section.
 
-## Security Considerations
+## Security considerations
  - Without authentication, this enables fetching of files you know the hash of
    (assuming the hash you know is one the media repo of your server supports).
    This is potentially problematic, as hashes of things are leaked in places
@@ -190,7 +190,7 @@ invalid content for rooms that they participate in.
    media repo. This is a fairly far fetched usecase, but it's still an indicator
    that this might be problematic.  MSCNaN would help here.
 
-## Backwards Compatibility Concerns
+## Backwards compatibility concerns
 Clients/Servers not implementing this MSC should continue to work normally. New
 events sent with non-CID media IDs should not pose a problem either, because
 they wouldn't be parsed as CIDs successfully. If they actually are parsed as
