@@ -78,6 +78,16 @@ does not change it's behaviour will still work as expected. Clients can
 additionally verify that a media file is actually as sent by the origin
 server, as they now get a hash they can look at for verification.
 
+The server should not use v0 CIDs, it should always use v1 CIDs (until we change
+that in the future). The server may implement any number of supported hashes
+from the multihash spec for decoding (bikeshedding opportunity: Do we want to
+recommend hashes here that we don't recommend sending, for making switching to
+other hashes easier in the future?), but it should stick to reasonably
+widespread hashes for files it is sending (bikeshedding opportunity: What do
+these include? https://github.com/multiformats/multicodec/blob/master/table.csv
+has a list of all hashes supported by the multihash spec. SHA2 and SHA3 should
+be safe bets).
+
 ### Receiving
 ```mermaid
 sequenceDiagram
@@ -114,14 +124,15 @@ verify the CID of the file returned by the remote to make sure we don't let
 malicious servers serve wrong content for rooms they participate in.
 
 ##### Potential remotes
-For looking at potential remotes, the server first looks at the origin
-encoded in the `mxc` URL. If that server is offline, and the client has
-supplied a room+event ID combo or explicit fallback servers, try those. For
-an event, first try server that were in the room when the event was sent and
-still are, then ones that can see the event and are in the room right now,
-and if all those fail, servers that were in the room back when the event was
-sent and aren't in the room anymore. For fallback servers supplied by the
-client, try them in the order the client put them into the query parameters.
+1. Origin encoded in the `mxc` URL.
+2. If the client has supplied explicit fallback servers, try those in the order
+   the client supplied them in.
+3. If the client has supplied a room+event ID combo as a hint:
+	1. Try the servers that used to be in the room back then and still are.
+	2. Try the servers that are in the room now but weren't back then.
+	3. Try the servers that used to be in the room but aren't anymore. These are
+	   tried last to make sure servers leaving a room aren't put under any
+	   unnecessary load from that room anymore.
 
 ## Potential Issues
  - Multihash and CID are not wide spread outside of IPFS and Protocol Labs.
