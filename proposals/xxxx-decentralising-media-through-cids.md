@@ -1,16 +1,16 @@
 # MSCNaN: Decentralising Media through CIDs
 <sup>Authored by Jan Christian Grünhage and Andrew Morgan</sup>
 
-Currently, the media API is less decentralised than most other aspects of
-matrix. When the homeserver which uploaded a piece of content goes down, the
-content is not visible from homeservers who didn't fetch it before. This is
-because the mxc URLs are made up of the server name of the sending server and
-an opaque media ID. We can't fetch it from other servers than the origin
+Currently, the Media API is less decentralised than most other aspects of
+Matrix. When the homeserver that uploaded a piece of content goes down, the
+content is not visible from homeservers that didn't fetch it beforehand. This is
+because the MXC URLs are made up of the server name of the sending server and
+an opaque media ID. We can't fetch media from servers other than the origin
 server because we there is no signature or hash included to verify the
 integrity of the file. This proposal modifies the media ID to be a
 [CID](https:/github.com/multiformats/cid) (content ID), which (among other
-things) includes a hash of the file, so that we can verify the integrity of
-the file, both on the server side and the client side.
+things) includes a hash of the file. This allows us to verify the integrity of
+the file both on the server side and the client side.
 
 ## Current Behaviour
 ### Sending
@@ -19,8 +19,8 @@ sequenceDiagram
   participant C as Client
   participant S as Server
   C->>S: upload file
-  S-->>C: return mxc URL
-  C->>S: send event with mxc URL
+  S-->>C: return MXC URL
+  C->>S: send event with MXC URL
   S-->>C: return event ID
 ```
 
@@ -44,11 +44,11 @@ sequenceDiagram
 
 ## Proposal
 ### Data structures
-We propose MXC URLs to change from `mxc://<server>/<opaque ID>` to
+We propose MXC URLs change from `mxc://<server>/<opaque ID>` to
 `mxc://<server>/<CID>`. We include the server here for backwards
 compatibility reasons, so that old servers and clients would still work as
 before, and also as a primary source for downloading the media. If that
-fails, the server needs a hint where to get the media from instead, which the
+fails, the server needs a hint on where to get the media from instead, which the
 client may send to the server as a query parameter.
 
 ### Sending
@@ -59,29 +59,30 @@ sequenceDiagram
     C->>S: upload file
     activate S
     S->>S: calculate CID
-    S-->>C: return mxc URL with CID
+    S-->>C: return MXC URL with CID
     deactivate S
 
     opt verify CID
       C->>C: verify the CID
     end
 
-    C->>S: send event with mxc URL
+    C->>S: send event with MXC URL
     activate S
     S-->>C: event ID
     deactivate S
 ```
 
-This as you can see, this is very similar to what happens so far on existing
-clients and servers. The client behaviour *can* change, but a client that
-does not change it's behaviour will still work as expected. Clients can
-additionally verify that a media file is actually as sent by the origin
-server, as they now get a hash they can look at for verification.
+As you can see, this is very similar to what happens on existing clients and
+servers. The client behaviour *can* change (in terms of verification of file
+integrity), but a client that does not change its behaviour will still work
+as expected. Clients can additionally verify that the MXC URL they received
+from the server actually represents the file that was originally sent.
 
 The server should not use v0 CIDs, it should always use v1 CIDs (until we change
-that in the future). The server may implement any number of supported hashes
+that in the future). This is because v1 CIDs have lots of benefits over their v0
+counterpart. The server may implement any number of supported hashes
 from the multihash spec for decoding (bikeshedding opportunity: Do we want to
-recommend hashes here that we don't recommend sending, for making switching to
+recommend hashes here that we don't recommend sending, for making the switch to
 other hashes easier in the future?), but it should stick to reasonably
 widespread hashes for files it is sending (bikeshedding opportunity: What do
 these include? https://github.com/multiformats/multicodec/blob/master/table.csv
@@ -113,15 +114,15 @@ sequenceDiagram
   end
 ```
 
-Again, very similar to what happens in the current state. You can drop old
-implementations into this just fine, everything will continue to work, but
-new implementations will be able to verify additional hashes and try more
+Again very similar to what happens in the current state. You can drop old
+implementations into this just fine, everything will continue to work.
+New implementations will be able to verify additional hashes and try more
 fallbacks for fetching content.
 
-The client usually trusts it's own server at least somewhat, so it doesn't
+The client usually trusts its own server at least somewhat, so it doesn't
 need to verify the CID of the file served there, but the server needs to
-verify the CID of the file returned by the remote to make sure we don't let
-malicious servers serve wrong content for rooms they participate in.
+verify the CID of the file returned by the remote to prevent malicious
+remotes from serving invalid content for rooms that they participate in.
 
 ##### Potential remotes
 1. Origin encoded in the MXC URL.

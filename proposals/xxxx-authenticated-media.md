@@ -18,7 +18,8 @@ thus the ability to access the uploaded media.
 ### The Attachment
 
 For controlling access to files we reuse event access, attaching event IDs
-and room IDs to files. These attachments are represented by a json blob:
+and room IDs to files. This is the function of attachments. Attachments are
+represented by a json blob:
 ```json
 {
   "event_id": "$854tBUEGeaXZOts1uV4E1gC0VfpAPaU4Z1gLEhXZyK4",
@@ -69,9 +70,9 @@ sequenceDiagram
     deactivate S
 ```
 
-To upload access controlled media:
+To upload access-controlled media:
 
-1. The Client uploads media, sigalling to the server that the media is private,
+1. The client uploads media, sigalling to the server that the media is private,
    and should only be accessible by users that can also read the associated
    event. An example request would look like:
    
@@ -104,13 +105,21 @@ To upload access controlled media:
    
    <event content>
    ```
-7. The server will check whether an association exists between the provided MXC
-   URL and the user making the request.
-   TODO: More of this
+7. The server will check whether an association exists between the provided
+   MXC URL and the user making the request. If one does not, then fail the
+   request, as we cannot verify that this user has had access to the file.
+8. The server will create and store a private attachment using the event ID,
+   room ID and the file's contents, similar to the following:
 
-
-Authenticated Media relies on event authentication, thus the media must be
-tied to an event. This is the function of attachments.
+   ```json
+   {
+     "event_id": "$854tBUEGeaXZOts1uV4E1gC0VfpAPaU4Z1gLEhXZyK4",
+     "room_id": "!abcdefghijk:example.com",
+     "proof": "<multihash>"
+   }
+   ```
+9. The server will then send the event containing the MXC URL to all remote
+   servers in the room.
 
 #### Public Media
 
@@ -134,6 +143,25 @@ sequenceDiagram
     S-->>C: event ID
     deactivate S
 ```
+
+To upload public media, the process is much the same as before other than a
+small change on the server.
+
+1. The client uploads media, sigalling to the server that the media is
+   public, and is accessible to anyone who knows the media identifier. An
+   example request would look like:
+   
+   ```
+   POST /_matrix/media/r0/upload?visibility=public
+   Content-Type: application/pdf
+
+   <bytes>
+   ```
+   
+   Again the `visibility` parameter is used and set to "public". The
+   parameter may also be omitted, as "public" is default.
+2. The server will calculate an MXC URL in the same way it does today.
+3. The server will store and link the user and the MXC URL.
 
 
 #### The `visibility` query parameter
@@ -205,7 +233,7 @@ others to retrieve in future.
 
 ## Backwards Compatibility Concerns
 
-This MSC is entirely backwards compatible for public media. Server and
+This MSC is entirely backwards compatible for public media. Servers and
 clients wishing to support authenticated media will need to be updated, but
 will still be backwards compatible with media sent from older clients. Older
 clients will not be able to read authenticated media, but will continue to be
