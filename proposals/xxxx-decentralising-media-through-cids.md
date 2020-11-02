@@ -44,7 +44,7 @@ sequenceDiagram
 
 ## Proposal
 ### Data structures
-We propose `mxc` URLs to change from `mxc://<server>/<opaque ID>` to
+We propose MXC URLs to change from `mxc://<server>/<opaque ID>` to
 `mxc://<server>/<CID>`. We include the server here for backwards
 compatibility reasons, so that old servers and clients would still work as
 before, and also as a primary source for downloading the media. If that
@@ -124,7 +124,7 @@ verify the CID of the file returned by the remote to make sure we don't let
 malicious servers serve wrong content for rooms they participate in.
 
 ##### Potential remotes
-1. Origin encoded in the `mxc` URL.
+1. Origin encoded in the MXC URL.
 2. If the client has supplied explicit fallback servers, try those in the order
    the client supplied them in.
 3. If the client has supplied a room+event ID combo as a hint:
@@ -141,12 +141,12 @@ malicious servers serve wrong content for rooms they participate in.
 
 ## Alternatives/Related MSCs
 1. **MSC2706** proposes to use IPFS directly, but in a similarily backwards
-   compatible way to how we're changing `mxc` URLs here. MSC2706 does make
+   compatible way to how we're changing MXC URLs here. MSC2706 does make
    authenticating media worse, because it publishes the file to IPFS and that
    is easy to scrape, but that also means that fallback nodes are
    automatically found. Public files in this MSC *could* be put into IPFS in
    the future, maybe as an updated version of MSC2706, without changing the
-   `mxc` URL format again, as we'd already have CIDs here.
+   MXC URL format again, as we'd already have CIDs here.
 1. **MSC2703** specifies a grammer for media IDs, which could be problematic
    for us here. It specifies that media IDs must be opaque, as well as a
    maximum of 255 characters in length. This is in conflict to this MSC (and
@@ -187,6 +187,6 @@ Clients/Servers not implementing this MSC should continue to work normally.
 New events sent with non-CID media IDs should not pose a problem either,
 because they wouldn't be parsed as CIDs successfully. If they actually are
 parsed as CIDs successfully but aren't valid, that's either a huge
-coincidence, or, a lot more likely, a malicious `mxc` URL. In that case, it
-would just fail, which is not worse than what malicious `mxc` URLs can
+coincidence, or, a lot more likely, a malicious MXC URL. In that case, it
+would just fail, which is not worse than what malicious MXC URLs can
 already do right now.
