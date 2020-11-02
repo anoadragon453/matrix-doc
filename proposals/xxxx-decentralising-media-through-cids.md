@@ -118,6 +118,17 @@ implementations into this just fine, everything will continue to work.  New
 implementations will be able to verify additional hashes and try more fallbacks
 for fetching content.
 
+The server trying more fallbacks requires that the client hints to their server
+where the content might be located. This should be done by query parameters on
+the download request. There's two options here:
+ - A pair of room and event ID, given via the `room` and `event` query
+   parameters.
+ - A list of explicit fallback servers, via the `servers` query parameter.
+
+Giving a room and event ID is preferrable, but for some contexts it might be
+better to explicitly give fallback servers. (Bikeshedding opportunity: What
+usecases would this be? Avatars? Or do we want to remove this option completely?)
+
 The client usually trusts its own server at least somewhat, so it doesn't need
 to verify the CID of the file served there, but the server needs to verify the
 CID of the file returned by the remote to prevent malicious remotes from serving
