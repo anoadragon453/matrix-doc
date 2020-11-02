@@ -1,5 +1,5 @@
 # MSCNaN: Authentication of Media through Event-Based Attachments
-<sup>Authored by Jan Christian Grünhage and Andrew Morgan</sup>
+<sup>Authored by Andrew Morgan and Jan Christian Grünhage</sup>
 
 Currently when a file is uploaded to a homeserver, a MXC URL is created
 that allows anyone that possesses it to access that file - even if they do
@@ -12,6 +12,12 @@ This MSC aims to address authentication of media by linking it and the event
 that is sent in the room when the media is shared. With this link, homeservers
 can verify whether a user requesting a file has access to view an event, and
 thus the ability to access the uploaded media.
+
+TODO: Useful for pruning media. As once we know where media is useed, we can use
+that to remove media that's no longer attached to an event or used anywhere else
+meaningful.
+
+TODO: Useful to delete media when an event is deleted.
 
 ## Proposal
 
@@ -36,6 +42,8 @@ the following simpler attachment structure is required:
   "proof": "multihash('public' + file)"
 }
 ```
+
+An attachment is still required for public files in order to prove ...?
 
 The possible keys of an attachment are:
 
@@ -134,7 +142,7 @@ sequenceDiagram
     Note over C,S: We continue to store this mapping in case a<br>private attachment is added later.
     S->>S: calculate and store attachment
     Note over C,S: For public files, we store the attachment in the upload<br>step instead, as public files can be used in instances outside of event sending, such as profile pictures.
-    S-->>C: return MXC
+    S-->>C: return MXC URL
     deactivate S
 
     C->>S: send event{MXC URL}
@@ -161,8 +169,43 @@ small change on the server.
    Again the `visibility` parameter is used and set to "public". The
    parameter may also be omitted, as "public" is default.
 2. The server will calculate an MXC URL in the same way it does today.
-3. The server will store and link the user and the MXC URL.
+3. The server will store and link the user and the MXC URL. While this is not
+   necessary to send a public file, if the user wishes to make the file private
+   later, then this mapping will be necessary.
+   
+   Note that this MSC does not currently provide an endpoint to make an
+   existing public file private, which simply means adding a private
+   attachment in addition to a file's existing public attachment. In this
+   case, the server would still continue serve the file without
+   authentication. However, the server would also approve authenticated
+   attempts to access the file, and deny authenticated attempts that are
+   invalid.
+4. The server will calculate and store a public attachment for this file.
+   This merely uses a multihash of the string "public" and the file's content.
+   For example:
+   ```json
+   {
+     "proof": "multihash('public' + file)"
+   }
+   ```
 
+   Note that this step is completed during the uploading of the media, rather
+   than when sending the event as in the authenticated media upload case. While
+   this does introduce a minor increase in implementation complexity, the reason
+   is that the send event step is not strictly necessary when uploading a public
+   file. One could just take the returned MXC URL and do something else with it.
+5. The server will return the generated MXC URL to the client.
+6. The client now decides it wants to send this MXC URL leading to public
+   media as part of an event. This works exactly the same way as before. For
+   example:
+
+   ```
+   PUT /_matrix/client/r0/rooms/{roomId}/send/{eventType}/{txnId}
+   
+   <event content>
+   ```
+7. The server will then send the event containing the MXC URL to all remote
+   servers in the room.
 
 #### The `visibility` query parameter
 
@@ -176,9 +219,10 @@ entity across the Matrix specification. There are two possible values for this p
 
 The default is `public`, for backwards compatibility purposes.
 
-#### Downloading:
-This is limited to the "all good" case for private files. Things like public
-files, and denied access are left out to make the diagram more readable.
+#### Downloading
+Note that the diagram is limited to the "all good" case for authenticated media.
+Things like public media, and denied access are left out to make the diagram
+more legible.
 
 ```mermaid
 sequenceDiagram
@@ -203,18 +247,45 @@ sequenceDiagram
   C->>C: verify MXC URL of file
 ```
 
-Potential remotes here starts with the server sending the event, continuing with servers that have been in the room when the event was sent, continuing with servers in the room right now.
+1. The client requests a piece of authenticated media from its homeserver,
+   providing an event ID to help prove the user's access. This is done via a new
+   `event_id` parameter. An example request would look like the following:
 
-In the case that the origin server in the `mxc` url responds, but doesn't have the file, try to fall back to the old download endpoint, in case this is a not a new style file. Server implementations are encouraged to serve old style files on the new endpoint too, in case the media ID that is sent over does match an old style file but not a new style one.
+   ```
+   GET /_matrix/media/r0/download/example.org/1220...89a8?event_id=public
+   ```
 
-For future reference: In case of a public file, also try fetching it from IPFS, if directly fetching it fails.
 
-#### Extending `GET /_matrix/media/r0/attachments`
+TODO: Note that the server MUST verify that the user has access to the event_id
+specified with the MXC URL, and that an attachment exists proving the this
+event_id/room_id combo and MXC URL are linked.
 
-TODO(verify): We allow clients and servers to request attachments of media files. This
-is most useful for servers, as they will be able to create and save the
+The process for implementations selecting potential remotes SHOULD be the following:
+
+1. Try the server encoded in the MXC URL.
+2. Try the servers that used to be in the room back then and still are.
+3. Try the servers that are in the room now but weren't back then.
+4. Try the servers that used to be in the room but aren't anymore. These are
+    tried last to make sure servers leaving a room aren't put under any
+    unnecessary load from that room anymore.
+
+#### The `event_id` query parameter
+
+A new query parameter is added to the `GET /_matrix/media/r0/download`
+endpoint called `event_id`. This allows the client to signal to the server
+which event ID it found the MXC URL in, and that it would like to
+authenticate using the user's access to the event ID and an associated
+attachment.
+
+#### Extending `GET /_matrix/media/r0/attachments` (TODO: /attachment?)
+
+TODO(verify): We allow clients and servers to request attachments of media
+files. This is most useful for servers, as they will be able to save the
 attachments for private files, meaning future requests for that file will not
 require contacting the original server for verification again.
+
+(Wait but won't we request the attachment anyways when requesting media? Or do
+we want this to be two separate requests? Why would it ever be separate?)
 
 #### Example:
 
@@ -231,7 +302,16 @@ The client's server then verifies the payload from the remote. It verifies file'
 Assuming it does, the server happily serves the file, and caches it locally for
 others to retrieve in future.
 
-## Backwards Compatibility Concerns
+## Potential issues
+
+## Alternatives
+
+- If a piece of media is still not found as exhausting all potential remotes, an
+  implementation could then try fetching the file from IPFS.
+
+## Security concerns
+
+## Backwards compatibility concerns
 
 This MSC is entirely backwards compatible for public media. Servers and
 clients wishing to support authenticated media will need to be updated, but
