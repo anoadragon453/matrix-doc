@@ -148,7 +148,7 @@ remotes from serving invalid content for rooms that they participate in.
    automatically found. Public files in this MSC *could* be put into IPFS in
    the future, maybe as an updated version of MSC2706, without changing the
    MXC URL format again, as we'd already have CIDs here.
-1. **MSC2703** specifies a grammer for media IDs, which could be problematic
+1. **MSC2703** specifies a grammar for media IDs, which could be problematic
    for us here. It specifies that media IDs must be opaque, as well as a
    maximum of 255 characters in length. This is in conflict to this MSC (and
    also MSC2706), because we do encode information in the media ID, which
@@ -162,17 +162,16 @@ remotes from serving invalid content for rooms that they participate in.
    thousand bits.
 1. **MSC2834** proposes to replace MXC URLs with custom hash identifier + hash
    strings. This is very similar to what we're doing here, with the difference
-   of not reusing preexisting methods like multihash and CIDs.  Also, by
+   of not reusing pre-existing methods like multihash and CIDs. Also, by
    removing the server name from the MXC URL, it breaks backwards compatibility
-   on the server side, and for clients which try to parse the
-   MXC URL.
+   on the server side, and for clients which attempt to parse the MXC URL.
 1. **MSCNaN** proposes authentication of media endpoints using events attached
    to the media files. As this MSC also does, it proposes sending the room and
-   event ID as query parameters when downloading. It's authentication would also
+   event ID as query parameters when downloading. Its authentication would also
    help with the potential issue of leaking file contents, as discussed in the
    security considerations section.
 
-## Security considerations
+## Security Considerations
  - Without authentication, this enables fetching of files you know the hash of
    (assuming the hash you know is one the media repo of your server
    supports). This is potentially problematic, as hashes of things are leaked
