@@ -18,8 +18,7 @@ thus the ability to access the uploaded media.
 ### The Attachment
 
 For controlling access to files we reuse event access, attaching event IDs
-and room IDs to files. These attachments are represented by a json blob,
-signed by the signing key of the server:
+and room IDs to files. These attachments are represented by a json blob:
 ```json
 {
   "event_id": "$854tBUEGeaXZOts1uV4E1gC0VfpAPaU4Z1gLEhXZyK4",
@@ -45,63 +44,103 @@ The possible keys of an attachment are:
 | room_id | string | The ID of the room the event was sent in. <br/>This field is currently required while event IDs are not globally unique. |
 | proof | string | A [multihash](https://multiformats.io/multihash/) of the file's contents and either the room ID concatanated with <br/>the event ID or the string 'public'. This ensures that only someone with access <br/>to the file content can then allow others to access the file.
 
-. o O ( We could just let the client calculate the proof and let them upload
-that instead of using the nonce and calculating that on the server, but then
-we wouldn't have any indication that the file has a pending event ID
-attachment. Maybe we can do another hash thing here, telling the server "hey
-I'm about to use this file" with generating a hash of that file with some
-predefined string and a current timestamp )
-
 ### Uploading:
 
-Uploading a private file:
+#### Private Media
 
 ```mermaid
 sequenceDiagram
     participant C as Client
     participant S as Server
-    C->>S: upload file, ?visibility=private
+    C->>S: upload media, ?visibility=private
     activate S
     S->>S: calculate MXC URL
+    S->>S: store and link MXC URL, user
     S-->>C: return MXC
     deactivate S
 
-    C->>S: send event{MXC URL}
+    C->>S: send event{MXC URL}, MXC URL
+    Note over C,S: We send another MXC URL separately so that <br>1. the server doesn't have to fish it out of the event and <br>2. the server can't read encrypted events
     activate S
+    S->>S: check for MXC URL + user link
+    S->>S: calculate and store attachment
+    S->>S: send event
     S-->>C: event ID
-    deactivate S
-    
-    C->>S: event ID + Media ID
-    activate S
-    S->>S: calculate attachment
-    S->>S: store attachment
-    S-->>C: return OK
     deactivate S
 ```
 
-Uploading a public file:
+To upload access controlled media:
+
+1. The Client uploads media, sigalling to the server that the media is private,
+   and should only be accessible by users that can also read the associated
+   event. An example request would look like:
+   
+   ```
+   POST /_matrix/media/r0/upload?visibility=private
+   Content-Type: application/pdf
+
+   <bytes>
+   ```
+   
+   The only addition this MSC makes is the `visibility` query parameter. The
+   associated event will be sent shortly.
+2. The server will calculate an MXC URL in the same way it does today.
+3. The server will store an association between the user and the uploaded MXC
+   URL. This allows the server to link the media upload and event sending
+   requests together.
+4. The server will return the MXC URL to the client.
+5. Upon receiving the MXC URL, the client will insert it into the event it is
+   intending to send. This can be a `m.room.message` with a media-related
+   msgtype, or even an `m.room.membership` if the user is setting a profile
+   picture that is private to a room.
+6. The client will send the event and the MXC URL separately to the server.
+   The separation is for two reasons. It is easier than requiring the server to
+   fish the MXC URL out of the event, and that the server cannot read encrypted
+   events. Sending the MXC URL outside of the event is implemented using another
+   new query parameter on an existing endpoint: `mxc_uri`. For example:
+
+   ```
+   PUT /_matrix/client/r0/rooms/{roomId}/send/{eventType}/{txnId}?mxc_uri=mxc://example.com/abcde
+   
+   <event content>
+   ```
+7. The server will check whether an association exists between the provided MXC
+   URL and the user making the request.
+   TODO: More of this
+
+
+Authenticated Media relies on event authentication, thus the media must be
+tied to an event. This is the function of attachments.
+
+#### Public Media
 
 ```mermaid
 sequenceDiagram
     participant C as Client
     participant S as Server
-    C->>S: upload file
+    C->>S: upload file, (?visibility=public)
     activate S
     S->>S: calculate MXC URL
+    S->>S: store and link MXC URL, user
+    Note over C,S: We continue to store this mapping in case a<br>private attachment is added later.
+    S->>S: calculate and store attachment
+    Note over C,S: For public files, we store the attachment in the upload<br>step instead, as public files can be used in instances outside of event sending, such as profile pictures.
     S-->>C: return MXC
     deactivate S
 
     C->>S: send event{MXC URL}
     activate S
+    S->>S: send event
     S-->>C: event ID
     deactivate S
 ```
+
 
 #### The `visibility` query parameter
 
 A new query parameter is added to the `POST /_matrix/media/r0/upload` endpoint called
 `visibility`, due to the phrase being commonly used to assert access to an
-entity across the Matrix spec. There are two possible values for this parameter:
+entity across the Matrix specification. There are two possible values for this parameter:
 
 * `private` - the uploaded file is intended to be private and an attachment must
   be uploaded separately before this file can be accessed.
@@ -109,85 +148,16 @@ entity across the Matrix spec. There are two possible values for this parameter:
 
 The default is `public`, for backwards compatibility purposes.
 
-#### Adding a new endpoint for uploading attachments
-
-A new endpoint is added for media: `POST /_matrix/media/r0/attachment`.
-
-TODO(word better): This is where we upload attachments. Not necessary for public
-uploads, once this is done other users can access the file if they provide the
-correct details etc. etc.
-
-Merging the attachment to the media during the sending of the event itself
-was considered, which would bring the event sending and media APIs closer
-together. However, it would make things difficult for stand-alone media
-repositories such as
-[matrix-media-repo](https://github.com/turt2live/matrix-media-repo), as it
-would require further communication between the media repository and
-homeserver to be specified.
-
-## Example
-
-The client uploads a file, specifying whether the file should be private. If
-the file is not set to private explicitly, it defaults to being public for
-backwards compatibility reasons.
-
-```
-POST /_matrix/media/r0/upload?filename=something.png&visibility=private
-Content-Type: image/png
-
-<bytes>
-```
-
-The reply is made up of:
-
-```json
-{
-  "content_uri": "mxc://example.org/abdefg123",
-  "nonce": "abcde"
-}
-```
-
-Once the file is stored on the server, the client sends an event into the
-room. This could be a `m.file`, `m.audio`, `m.video` etc.
-
-After sending the event and receiving an event ID, the client needs to attach
-that event ID to the uploaded file. To do this, a request to the new `attach`
-endpoint is made:
-
-```
-POST /_matrix/media/r0/attach?event_id=<event_id>&nonce=abcde
-```
-
-This calculates an attachment and stores it, while invalidating the nonce.
-
-As an alternative to the nonce, clients can also calculate the attachment
-themselves and upload it using the same endpoint:
-
-```
-POST /_matrix/media/r0/attach
-Content-Type: application/json
-
-{
-  "event": "$854tBUEGeaXZOts1uV4E1gC0VfpAPaU4Z1gLEhXZyK4",
-  "content": "bafkreibme22gw2h7y2h7tg2fhqotaqjucnbc24deqo72b6mkl2egezxhvy",
-  "proof": "multihash(event_id + file)"
-}
-```
-
-When no event_id is specified in the query parameters and no json body is passed, but the nonce is valid, mark the event public.
-
-Note: Should we even provide the nonce way to send attachments?
-
-
 #### Downloading:
-This is limited to the "all good" case for private files. Things like public files, and denied access are left out to make the diagram more readable.
+This is limited to the "all good" case for private files. Things like public
+files, and denied access are left out to make the diagram more readable.
 
 ```mermaid
 sequenceDiagram
   participant C as Client
   participant S as Server
   participant R as Remote
-  C->>S: req file w/ CID/EventID
+  C->>S: req file w/ MXC URL/event ID
   activate S
   opt fetch file/attachment
     loop try potential remotes
@@ -197,12 +167,12 @@ sequenceDiagram
       R-->>S: serve file/attachment
       deactivate R
     end
-    S->>S: verify CID of file
+    S->>S: verify MXC URL of file
   end
   S->>S: check access of user
   S-->>C: serve file
   deactivate S
-  C->>C: verify CID of file
+  C->>C: verify MXC URL of file
 ```
 
 Potential remotes here starts with the server sending the event, continuing with servers that have been in the room when the event was sent, continuing with servers in the room right now.
@@ -228,6 +198,15 @@ The client's server determines whether this is a new MXC URL by attempting to de
 
 If the server does not have the media locally, it will ask each homeserver in the room linked to the given event ID whether it has the file. If one does, the remote homeserver will check whether the requested content has an event attached to it. If it does, the remote checks that the client's server has a user in the room with that event. If it does, the remote returns the file and attachment.
 
-The client's server then verifies the payload from the remote. It verifies file's integrity using the CID provided by the client. It then uses the attachment to ensure that this user is in the room and has access to the referenced event.
+The client's server then verifies the payload from the remote. It verifies file's integrity using the MXC URL provided by the client. It then uses the attachment to ensure that this user is in the room and has access to the referenced event.
 
-Assuming it does, the server happily serves the file, and caches it locally for others to retrieve in future.
+Assuming it does, the server happily serves the file, and caches it locally for
+others to retrieve in future.
+
+## Backwards Compatibility Concerns
+
+This MSC is entirely backwards compatible for public media. Server and
+clients wishing to support authenticated media will need to be updated, but
+will still be backwards compatible with media sent from older clients. Older
+clients will not be able to read authenticated media, but will continue to be
+able to read public media from updated clients and servers.
